@@ -10,6 +10,7 @@ require 'oauth'
 require 'quickbooks/util/logging'
 require 'quickbooks/util/http_encoding_helper'
 require 'quickbooks/util/name_entity'
+require 'quickbooks/util/query_builder'
 
 #== Models
 require 'quickbooks/model/base_model'
@@ -19,6 +20,7 @@ require 'quickbooks/model/meta_data'
 require 'quickbooks/model/custom_field'
 require 'quickbooks/model/sales_item_line_detail'
 require 'quickbooks/model/sub_total_line_detail'
+require 'quickbooks/model/discount_line_detail'
 require 'quickbooks/model/discount_override'
 require 'quickbooks/model/payment_line_detail'
 require 'quickbooks/model/account_based_expense_line_detail'
@@ -62,6 +64,13 @@ require 'quickbooks/model/purchase_order'
 require 'quickbooks/model/vendor_credit'
 require 'quickbooks/model/estimate'
 require 'quickbooks/model/invoice'
+require 'quickbooks/model/tax_rate'
+require 'quickbooks/model/tax_rate_detail'
+require 'quickbooks/model/sales_tax_rate_list'
+require 'quickbooks/model/tax_code'
+require 'quickbooks/model/fault'
+require 'quickbooks/model/batch_request'
+require 'quickbooks/model/batch_response'
 
 #== Services
 require 'quickbooks/service/service_crud'
@@ -86,6 +95,9 @@ require 'quickbooks/service/purchase'
 require 'quickbooks/service/purchase_order'
 require 'quickbooks/service/vendor_credit'
 require 'quickbooks/service/estimate'
+require 'quickbooks/service/tax_rate'
+require 'quickbooks/service/tax_code'
+require 'quickbooks/service/batch'
 
 module Quickbooks
   @@logger = nil
@@ -100,11 +112,16 @@ module Quickbooks
     end
 
     # set logging on or off
-    attr_writer :log
+    attr_writer :log, :log_xml_pretty_print
 
     # Returns whether to log. Defaults to 'false'.
     def log?
       @log ||= false
+    end
+
+    # pretty printing the xml in the logs is "on" by default
+    def log_xml_pretty_print?
+      defined?(@log_xml_pretty_print) ? @log_xml_pretty_print : true
     end
 
     def log(msg)
@@ -119,8 +136,10 @@ module Quickbooks
 
   class AuthorizationFailure < StandardError; end
 
+  class ServiceUnavailable < StandardError; end
+
   class IntuitRequestException < StandardError
-    attr_accessor :message, :code, :detail, :type
+    attr_accessor :message, :code, :detail, :type, :request_xml
     def initialize(msg)
       self.message = msg
       super(msg)

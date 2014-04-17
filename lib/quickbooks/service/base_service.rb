@@ -194,11 +194,12 @@ module Quickbooks
           headers['Accept-Encoding'] = HTTP_ACCEPT_ENCODING
         end
 
-        log "------ New Request ------"
+        log "------ QUICKBOOKS-RUBY REQUEST ------"
         log "METHOD = #{method}"
         log "RESOURCE = #{url}"
-        log "BODY(#{body.class}) = #{body == nil ? "<NIL>" : body.inspect}"
-        log "HEADERS = #{headers.inspect}"
+        log "REQUEST BODY:"
+        log(log_xml(body))
+        log "REQUEST HEADERS = #{headers.inspect}"
 
         response = case method
           when :get
@@ -208,7 +209,7 @@ module Quickbooks
           else
             raise "Do not know how to perform that HTTP operation"
           end
-        check_response(response)
+        check_response(response, :request_xml => body)
       end
 
       def add_query_string_to_url(url, params)
@@ -219,16 +220,18 @@ module Quickbooks
         end
       end
 
-      def check_response(response)
+      def check_response(response, options = {})
+        log "------ QUICKBOOKS-RUBY RESPONSE ------"
         log "RESPONSE CODE = #{response.code}"
-        log "RESPONSE BODY = #{response.plain_body}"
+        log "RESPONSE BODY:"
+        log(log_xml(response.plain_body))
         parse_xml(response.plain_body)
         status = response.code.to_i
         case status
         when 200
           # even HTTP 200 can contain an error, so we always have to peek for an Error
           if response_is_error?
-            parse_and_raise_exception
+            parse_and_raise_exception(options)
           else
             response
           end
@@ -237,19 +240,21 @@ module Quickbooks
         when 401
           raise Quickbooks::AuthorizationFailure
         when 400, 500
-          parse_and_raise_exception
+          parse_and_raise_exception(options)
+        when 503
+          raise Quickbooks::ServiceUnavailable
         else
           raise "HTTP Error Code: #{status}, Msg: #{response.plain_body}"
         end
       end
 
-      def parse_and_raise_exception
+      def parse_and_raise_exception(options = {})
         err = parse_intuit_error
         ex = Quickbooks::IntuitRequestException.new("#{err[:message]}:\n\t#{err[:detail]}")
         ex.code = err[:code]
         ex.detail = err[:detail]
         ex.type = err[:type]
-
+        ex.request_xml = options[:request_xml]
         raise ex
       end
 

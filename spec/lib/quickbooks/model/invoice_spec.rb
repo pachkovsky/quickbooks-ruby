@@ -13,6 +13,8 @@ describe "Quickbooks::Model::Invoice" do
     invoice.private_note.should == "Statement Memo"
     invoice.line_items.should_not be_nil
     invoice.line_items.length.should == 2
+    invoice.currency_ref.to_s.should == 'USD'
+    invoice.currency_ref.name.should == 'United States Dollar'
 
     line_item1 = invoice.line_items[0]
     line_item1.id.should == 1
@@ -118,6 +120,31 @@ describe "Quickbooks::Model::Invoice" do
     invoice.errors.keys.include?(:bill_email).should == false
   end
 
+  describe "#auto_doc_number" do
+
+    it "turned on should set the AutoDocNumber tag" do
+      invoice = Quickbooks::Model::Invoice.new
+      invoice.auto_doc_number!
+      invoice.to_xml.to_s.should =~ /AutoDocNumber/
+    end
+
+    it "turned on then doc_number should not be specified" do
+      invoice = Quickbooks::Model::Invoice.new
+      invoice.doc_number = 'AUTO'
+      invoice.auto_doc_number!
+      invoice.valid?
+      invoice.valid?.should == false
+      invoice.errors.keys.include?(:doc_number).should be_true
+    end
+
+    it "turned off then doc_number can be specified" do
+      invoice = Quickbooks::Model::Invoice.new
+      invoice.doc_number = 'AUTO'
+      invoice.valid?
+      invoice.errors.keys.include?(:doc_number).should be_false
+    end
+  end
+
   it "can properly convert to/from BigDecimal" do
     input_xml = fixture("invoice.xml")
     invoice = Quickbooks::Model::Invoice.from_xml(input_xml)
@@ -130,5 +157,12 @@ describe "Quickbooks::Model::Invoice" do
     node = xml.xpath("//Invoice/Line/Amount")[0]
     node.should_not be_nil
     node.content.should == "198.99"
+  end
+
+  it "can set the currency" do
+    invoice = Quickbooks::Model::Invoice.new
+    invoice.currency_id = 'CAD'
+    invoice.currency_ref.name = 'Canadian Dollar'
+    invoice.to_xml.to_s.should match /CurrencyRef name.+?Canadian Dollar.+?>CAD/
   end
 end
